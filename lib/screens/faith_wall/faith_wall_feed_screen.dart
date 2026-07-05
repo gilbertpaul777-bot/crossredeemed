@@ -1,7 +1,10 @@
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../services/moderation_service.dart';
 import 'package:cross_redeemed/screens/auth/guest_modal.dart';
 import 'package:cross_redeemed/screens/home/comments_bottom_sheet.dart';
 import 'package:cross_redeemed/screens/safety/report_dialog.dart';
@@ -74,43 +77,57 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        backgroundColor: Colors.transparent, // Let MainShell background show
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          flexibleSpace: ClipRRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(color: Colors.black.withAlpha(50)),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: AppTheme.nebulaGradient,
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.transparent, // Let MainShell background show
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            flexibleSpace: ClipRRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(color: Colors.black.withAlpha(50)),
+              ),
+            ),
+            title: const Text(
+              'Faith Wall',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            bottom: TabBar(
+              indicator: BoxDecoration(
+                borderRadius: BorderRadius.circular(30),
+                gradient: AppTheme.nebulaGradient,
+                border: Border.all(color: Colors.white.withAlpha(50), width: 1),
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white54,
+              tabs: const [
+                Tab(text: 'For You'),
+                Tab(text: 'Following'),
+              ],
             ),
           ),
-          title: const Text(
-            'Faith Wall',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: TabBarView(
+                children: [
+                  _buildFeedStream(isFollowing: false),
+                  _buildFeedStream(isFollowing: true),
+                ],
+              ),
+            ),
           ),
-          bottom: const TabBar(
-            indicatorColor: AppTheme.primaryPurple,
-            indicatorWeight: 3,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white54,
-            tabs: [
-              Tab(text: 'For You'),
-              Tab(text: 'Following'),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            _buildFeedStream(isFollowing: false),
-            _buildFeedStream(isFollowing: true),
-          ],
-        ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showCreatePostModal(context),
           backgroundColor: AppTheme.accentGold,
           child: const Icon(Icons.edit, color: Colors.black),
         ),
+      ),
       ),
     );
   }
@@ -203,6 +220,9 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
   void _showCreatePostModal(BuildContext context) {
     final TextEditingController contentCtrl = TextEditingController();
     String selectedType = 'prayer_request';
+    XFile? selectedMedia;
+    Uint8List? selectedMediaBytes;
+    bool isModerating = false;
 
     showModalBottomSheet(
       context: context,
@@ -213,15 +233,15 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
           builder: (context, setModalState) {
             return ClipRRect(
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
+                top: Radius.circular(24),
               ),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(150),
+                    color: Colors.white.withAlpha(15),
                     border: const Border(
-                      top: BorderSide(color: Colors.white24, width: 1),
+                      top: BorderSide(color: Colors.white30, width: 1),
                     ),
                   ),
                   child: Padding(
@@ -259,12 +279,12 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
 
                         // Category Dropdown
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(20),
-                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withAlpha(15),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: Colors.white.withAlpha(40),
+                              color: Colors.white.withAlpha(30),
                             ),
                           ),
                           child: DropdownButtonHideUnderline(
@@ -309,21 +329,65 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
                             hintText: 'What is on your heart?',
                             hintStyle: const TextStyle(color: Colors.white30),
                             filled: true,
-                            fillColor: Colors.white.withAlpha(20),
+                            fillColor: Colors.white.withAlpha(15),
                             enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                               borderSide: BorderSide(
-                                color: Colors.white.withAlpha(40),
+                                color: Colors.white.withAlpha(30),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                               borderSide: const BorderSide(
                                 color: AppTheme.accentGold,
                               ),
                             ),
                           ),
                         ),
+                        const SizedBox(height: 12),
+
+                        // Media attachment
+                        if (selectedMediaBytes != null)
+                          Stack(
+                            children: [
+                              Container(
+                                height: 100,
+                                width: 100,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  image: DecorationImage(
+                                    image: MemoryImage(selectedMediaBytes!),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                right: -10,
+                                top: -10,
+                                child: IconButton(
+                                  icon: const Icon(Icons.cancel, color: Colors.white),
+                                  onPressed: () => setModalState(() => selectedMedia = null),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          TextButton.icon(
+                            onPressed: () async {
+                              final picker = ImagePicker();
+                              final file = await picker.pickImage(source: ImageSource.gallery);
+                              if (file != null) {
+                                final bytes = await file.readAsBytes();
+                                setModalState(() {
+                                  selectedMedia = file;
+                                  selectedMediaBytes = bytes;
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.image, color: Colors.white70),
+                            label: const Text('Attach Image', style: TextStyle(color: Colors.white70)),
+                          ),
+
                         const SizedBox(height: 20),
 
                         // Post Button
@@ -342,31 +406,49 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
                             ],
                           ),
                           child: ElevatedButton(
-                            onPressed: () async {
+                            onPressed: isModerating ? null : () async {
                               final content = contentCtrl.text.trim();
-                              if (content.isEmpty) return;
+                              if (content.isEmpty && selectedMedia == null) return;
 
-                              // Disable button while posting
-                              setModalState(() {});
+                              // Disable button and show loading state
+                              setModalState(() => isModerating = true);
 
                               // Capture Nav/Messenger state for safe async usage
-                              final scaffoldMessenger = ScaffoldMessenger.of(
-                                context,
-                              );
+                              final scaffoldMessenger = ScaffoldMessenger.of(context);
                               final navigator = Navigator.of(context);
 
-                              try {
-                                final user =
-                                    Supabase.instance.client.auth.currentUser;
-                                if (user == null) {
+                              // 1. Content Moderation using AWS Rekognition via our service
+                              if (selectedMedia != null) {
+                                scaffoldMessenger.showSnackBar(
+                                  const SnackBar(content: Text('Scanning image with AWS Rekognition...')),
+                                );
+                                final modResult = await ModerationService.scanMedia(selectedMedia!);
+                                if (!modResult.isApproved) {
+                                  setModalState(() => isModerating = false);
                                   scaffoldMessenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'You must be logged in to post.',
-                                      ),
+                                    SnackBar(
+                                      content: Text('Upload blocked: ${modResult.reason}'),
+                                      backgroundColor: Colors.red,
                                     ),
                                   );
+                                  return; // Stop upload
+                                }
+                              }
+
+                              try {
+                                final user = Supabase.instance.client.auth.currentUser;
+                                if (user == null) {
+                                  scaffoldMessenger.showSnackBar(
+                                    const SnackBar(content: Text('You must be logged in to post.')),
+                                  );
+                                  setModalState(() => isModerating = false);
                                   return;
+                                }
+                                
+                                String? mediaUrl;
+                                // In a real app we'd upload the file to Supabase Storage here and get the URL
+                                if (selectedMedia != null) {
+                                   mediaUrl = 'https://fake-supabase-url.com/media.jpg'; 
                                 }
 
                                 await Supabase.instance.client
@@ -375,25 +457,27 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
                                       'user_id': user.id,
                                       'type': selectedType,
                                       'content': content,
+                                      'media_url': mediaUrl,
                                       'author_username':
                                           user.userMetadata?['username'] ??
                                           user.email?.split('@')[0] ??
                                           'Believer',
                                       'author_avatar':
                                           user.userMetadata?['avatar_url'],
+                                      'author_role':
+                                          user.userMetadata?['role'] ?? 'user',
                                     });
 
                                 navigator.pop();
                                 scaffoldMessenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Posted successfully!'),
-                                  ),
+                                  const SnackBar(content: Text('Posted successfully!')),
                                 );
                               } catch (e) {
                                 debugPrint('Error posting: $e');
                                 scaffoldMessenger.showSnackBar(
                                   SnackBar(content: Text('Error: $e')),
                                 );
+                                setModalState(() => isModerating = false);
                               }
                             },
                             style: ElevatedButton.styleFrom(
@@ -403,14 +487,16 @@ class _FaithWallFeedScreenState extends State<FaithWallFeedScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            child: const Text(
-                              'Post to Faith Wall',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            child: isModerating
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white))
+                              : const Text(
+                                  'Post to Faith Wall',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -540,6 +626,13 @@ class _FaithWallPostCardState extends State<FaithWallPostCard> {
         color: color.withAlpha(40),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withAlpha(150)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withAlpha(40),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Text(
         label,
@@ -547,6 +640,12 @@ class _FaithWallPostCardState extends State<FaithWallPostCard> {
           color: color,
           fontSize: 11,
           fontWeight: FontWeight.bold,
+          shadows: [
+            Shadow(
+              color: color,
+              blurRadius: 5,
+            ),
+          ],
         ),
       ),
     );
@@ -560,14 +659,21 @@ class _FaithWallPostCardState extends State<FaithWallPostCard> {
     final username = widget.post['author_username'] ?? 'Believer';
     final avatarUrl = widget.post['author_avatar'] as String?;
 
+    final roleStr = widget.post['author_role'] as String?;
+    final badgeType = roleStr == 'church'
+        ? BadgeType.church
+        : (roleStr == 'leader' || roleStr == 'pastor' || roleStr == 'priest')
+            ? BadgeType.leader
+            : BadgeType.user;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withAlpha(30), width: 1),
+        border: Border.all(color: Colors.white.withAlpha(50), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(50),
+            color: Colors.black.withAlpha(20),
             blurRadius: 10,
             spreadRadius: 2,
           ),
@@ -576,9 +682,9 @@ class _FaithWallPostCardState extends State<FaithWallPostCard> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            color: Colors.white.withAlpha(15),
+            color: Colors.white.withAlpha(20),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -611,8 +717,8 @@ class _FaithWallPostCardState extends State<FaithWallPostCard> {
                                   ),
                                 ),
                                 const SizedBox(width: 4),
-                                const InteractiveVerifiedBadge(
-                                  type: BadgeType.user,
+                                InteractiveVerifiedBadge(
+                                  type: badgeType,
                                   size: 16,
                                 ),
                               ],
@@ -654,6 +760,17 @@ class _FaithWallPostCardState extends State<FaithWallPostCard> {
                       height: 1.4,
                     ),
                   ),
+                  if (widget.post['media_url'] != null) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        widget.post['media_url'],
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   const Divider(color: Colors.white10, height: 1),
                   const SizedBox(height: 8),

@@ -45,3 +45,23 @@ app.*.map.json
 /android/app/release
 
 .env
+
+# Local project metadata
+/.metadata
+
+# Generated node_modules and API data
+/render_api/node_modules/
+/render_api/package-lock.json
+/render_api/data/api/
+
+# Scratch and temporary generated data
+/scratch/
+/supabase/.temp/
+/web/mhc/
+/temp_mhc/
+/mhcc_json/
+
+# Local Firebase/Android build config (keep secrets out of repo)
+/firebase.json
+/android/app/google-services.json
+/lib/firebase_options.dart
